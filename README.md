@@ -7,6 +7,7 @@ Bu proje, **Bursa Teknik Üniversitesi Bilgisayar Mühendisliği Bölümü** BLM
 
 ---
 Kodun Dosyası: https://github.com/ferideyalcinkaya/HammingSimulator2/blob/main/hamming_simulator.py
+
 Video Linki: https://www.youtube.com/watch?v=0fWqbEDYUNc
 ## 👥 Geliştirici Bilgileri
 * **Ad Soyad:** Feride Saygı Yalçınkaya
