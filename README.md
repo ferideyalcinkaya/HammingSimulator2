@@ -6,7 +6,7 @@
 Bu proje, **Bursa Teknik Üniversitesi Bilgisayar Mühendisliği Bölümü** BLM230 Bilgisayar Mimarisi dersi kapsamında geliştirilmiştir. Proje, bilgisayar mimarisinde bellek güvenliğini ve veri iletim doğruluğunu sağlamak amacıyla kullanılan **Hamming Tek Hata Düzeltme (Single Error Correction - SEC)** mekanizmasının donanımsal işleyişini görselleştiren interaktif bir simülasyon yazılımıdır.
 
 ---
-
+Kodun Dosyası: https://github.com/ferideyalcinkaya/HammingSimulator2/blob/main/hamming_simulator.py
 ## 👥 Geliştirici Bilgileri
 * **Ad Soyad:** Feride Saygı Yalçınkaya
 * **Öğrenci No:** 22360859064
@@ -57,3 +57,5 @@ Proje standart Python 3.x kütüphaneleri kullanılarak geliştirildiğinden ek 
 
 ```bash
 python main.py
+
+
