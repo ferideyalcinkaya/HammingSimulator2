@@ -1,16 +1,15 @@
 """
 BLM230 - Bilgisayar Mimarisi
 Hamming Error-Correcting Code Simülatörü
-Desteklenen veri genişlikleri: 8, 16, 32 bit
+Desteklenen veri genişlikleri: 8, 16, 32 bit 
 """
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-import math
 import random
 
 # ─────────────────────────────────────────────
-#  Hamming Hesaplama Fonksiyonları
+#  Hamming Hesaplama Fonksiyonları (Standart Mimari)
 # ─────────────────────────────────────────────
 
 def parity_bit_count(data_bits: int) -> int:
@@ -21,68 +20,63 @@ def parity_bit_count(data_bits: int) -> int:
     return r
 
 def encode_hamming(data_bits_str: str) -> tuple[str, list[int], list[int]]:
-    """Veri bitlerini Hamming koduna çevir."""
-    m = len(data_bits_str)
+    """Veri bitlerini standart sağdan sola Hamming koduna çevir."""
+    data_bits_rev = data_bits_str[::-1]
+    m = len(data_bits_rev)
     r = parity_bit_count(m)
-    n = m + r  # toplam bit sayısı
+    n = m + r
 
     hamming = [0] * (n + 1)
     parity_pos = [2**i for i in range(r)]
 
-    # Veri bitlerini (D) parity olmayan yerlere yerleştir (Soldan sağa mantığı)
     data_idx = 0
     for i in range(1, n + 1):
         if i not in parity_pos:
-            hamming[i] = int(data_bits_str[data_idx])
+            hamming[i] = int(data_bits_rev[data_idx])
             data_idx += 1
 
-    # Parity bitlerini hesapla
     for p in parity_pos:
         xor_val = 0
         for i in range(1, n + 1):
             if i & p:
-                xor_val ^= hamming[i]
+                xor_val ^= hamming[i]  # Standart algoritmaya uygun hale getirildi
         hamming[p] = xor_val
 
-    result = ''.join(str(hamming[i]) for i in range(1, n + 1))
+    # Ekrana basarken standart okuma yönüne (MSB'den LSB'ye) çeviriyoruz
+    result = ''.join(str(hamming[i]) for i in range(n, 0, -1))
     return result, parity_pos, list(range(1, n + 1))
 
 def detect_correct(hamming_str: str, r_bits_count: int) -> tuple[int, str]:
-    """
-    Sendrom kelimesini hesaplar, hatalı biti bulur ve düzeltir.
-    Döndürür: (syndrome_decimal, corrected_str)
-    """
+    """Sendrom kelimesini hesaplar, hatalı biti bulur ve düzeltir."""
     n = len(hamming_str)
-    hamming = [0] + [int(b) for b in hamming_str]  # 1-indexed yapısı
+    hamming_rev = [0] + [int(b) for b in hamming_str[::-1]]
 
     syndrome = 0
-    # Parity bit adedi kadar kontrol gerçekleştiriyoruz
     for i in range(r_bits_count):
         p = 2 ** i
         xor_val = 0
         for j in range(1, n + 1):
             if j & p:
-                xor_val ^= hamming[j]
-        # Eğer XOR sonucu 1 ise, sendromun ilgili bitini setliyoruz
+                xor_val ^= hamming_rev[j]
         if xor_val != 0:
             syndrome |= p
 
-    corrected = list(hamming_str)
-    # Sendrom 0'dan büyük ve toplam bit sayısından küçük/eşitse hata o indekstir
     if 0 < syndrome <= n:
-        corrected[syndrome - 1] = '1' if hamming_str[syndrome - 1] == '0' else '0'
+        hamming_rev[syndrome] = 1 if hamming_rev[syndrome] == 0 else 0
 
-    return syndrome, ''.join(corrected)
+    corrected_str = ''.join(str(hamming_rev[i]) for i in range(n, 0, -1))
+    return syndrome, corrected_str
 
 def extract_data(hamming_str: str, r: int) -> str:
-    """Hamming kodundan sadece orijinal veri bitlerini ayrıştırır."""
+    """Hamming kodundan orijinal veri bitlerini bozmadan ayrıştırır."""
     n = len(hamming_str)
+    hamming_rev = hamming_str[::-1]
     parity_pos = {2**i for i in range(r)}
     data = []
     for i in range(1, n + 1):
         if i not in parity_pos:
-            data.append(hamming_str[i - 1])
-    return ''.join(data)
+            data.append(hamming_rev[i - 1])
+    return ''.join(data[::-1])
 
 # ─────────────────────────────────────────────
 #  Renk Paleti & Stiller
@@ -103,33 +97,29 @@ PARITY_BG  = "#2a1f4e"
 DATA_BG    = "#1a2e1a"
 ERR_BG     = "#2e1a1a"
 
-FONT_TITLE = ("Courier New", 18, "bold")
-FONT_HEAD  = ("Courier New", 13, "bold")
-FONT_MONO  = ("Courier New", 12)
+FONT_TITLE = ("Courier New", 16, "bold")
+FONT_HEAD  = ("Courier New", 12, "bold")
+FONT_MONO  = ("Courier New", 11)
 FONT_SMALL = ("Courier New", 10)
-
-
-# ─────────────────────────────────────────────
-#  Ana Uygulama Sınıfı
-# ─────────────────────────────────────────────
 
 class HammingSimulator(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("BLM230 — Hamming Error-Correcting Code Simülatörü")
         self.configure(bg=BG)
-        self.geometry("1150x850")
+        self.geometry("1240x880")
 
-        # Durum Değişkenleri
         self.data_width   = tk.IntVar(value=8)
         self.data_input   = tk.StringVar()
-        self.memory       = {}          # addr -> data_dict
+        self.memory       = {}
         self.mem_addr     = 0
+
+        self.v_binary = self.register(self._validate_binary_entry)
+        self.v_digit = self.register(self._validate_digit_entry)
 
         self._build_ui()
 
     def _build_ui(self):
-        # Başlık Bölümü
         hdr = tk.Frame(self, bg=BG)
         hdr.pack(fill=tk.X, padx=20, pady=(15, 0))
         tk.Label(hdr, text="⬡  HAMMING SEC SİMÜLATÖRÜ", font=FONT_TITLE, fg=ACCENT, bg=BG).pack(side=tk.LEFT)
@@ -137,7 +127,6 @@ class HammingSimulator(tk.Tk):
 
         ttk.Separator(self, orient="horizontal").pack(fill=tk.X, padx=20, pady=8)
 
-        # Ana Panel Düzeni (Sol ve Sağ Kolonlar)
         main = tk.Frame(self, bg=BG)
         main.pack(fill=tk.BOTH, expand=True, padx=20, pady=4)
         main.columnconfigure(0, weight=3)
@@ -156,7 +145,7 @@ class HammingSimulator(tk.Tk):
         self._build_log_panel(right)
 
     def _build_encode_panel(self, parent):
-        card = self._card(parent, "📥  VERİ GİRİŞİ & KODLAMA")
+        card = self._card(parent, "📥  VERI GIRIŞI & KODLAMA")
         card.pack(fill=tk.X, pady=(0, 10))
 
         row = tk.Frame(card, bg=CARD)
@@ -171,15 +160,17 @@ class HammingSimulator(tk.Tk):
         inp_row = tk.Frame(card, bg=CARD)
         inp_row.pack(fill=tk.X, padx=12, pady=5)
         tk.Label(inp_row, text="Binary Veri:", font=FONT_MONO, fg=TEXT, bg=CARD, width=12, anchor="w").pack(side=tk.LEFT)
+        
         self.entry_data = tk.Entry(inp_row, textvariable=self.data_input, font=FONT_MONO, bg=PANEL, fg=GREEN,
-                                   insertbackground=GREEN, bd=0, relief=tk.FLAT, width=32)
+                                   insertbackground=GREEN, bd=0, relief=tk.FLAT, width=32,
+                                   validate="key", validatecommand=(self.v_binary, '%P'))
         self.entry_data.pack(side=tk.LEFT, ipady=4, padx=(4, 8))
-        self.entry_data.bind("<KeyRelease>", self._validate_input)
+        self.data_input.trace_add("write", lambda *args: self._update_bit_label())
 
         tk.Button(inp_row, text="Rastgele", font=FONT_SMALL, bg=ACCENT2, fg="white",
                   bd=0, padx=10, pady=4, cursor="hand2", command=self._random_fill).pack(side=tk.LEFT, padx=4)
 
-        self.lbl_bitcount = tk.Label(card, text="", font=FONT_SMALL, fg=SUBTEXT, bg=CARD)
+        self.lbl_bitcount = tk.Label(card, text="0/8 bit", font=FONT_SMALL, fg=SUBTEXT, bg=CARD)
         self.lbl_bitcount.pack(anchor="w", padx=14, pady=2)
 
         btn_row = tk.Frame(card, bg=CARD)
@@ -187,7 +178,6 @@ class HammingSimulator(tk.Tk):
         tk.Button(btn_row, text="▶  HAMMING KODLA & BELLEĞE YAZ", font=FONT_HEAD, bg=ACCENT, fg="white",
                   bd=0, padx=14, pady=6, cursor="hand2", command=self._encode_and_write).pack(fill=tk.X)
 
-        # Düzenlenmiş Grid Bilgi Alanı
         info_frame = tk.Frame(card, bg=CARD)
         info_frame.pack(fill=tk.X, padx=12, pady=5)
         
@@ -196,7 +186,7 @@ class HammingSimulator(tk.Tk):
         self.lbl_parity_count.grid(row=0, column=1, sticky="w", padx=10)
 
         tk.Label(info_frame, text="Hamming Kodu :", font=FONT_MONO, fg=SUBTEXT, bg=CARD).grid(row=1, column=0, sticky="w")
-        self.lbl_hamming_out = tk.Label(info_frame, text="—", font=FONT_MONO, fg=YELLOW, bg=CARD, wraplength=500, justify="left")
+        self.lbl_hamming_out = tk.Label(info_frame, text="—", font=FONT_MONO, fg=YELLOW, bg=CARD, wraplength=450, justify="left")
         self.lbl_hamming_out.grid(row=1, column=1, sticky="w", padx=10)
 
     def _build_memory_panel(self, parent):
@@ -205,8 +195,8 @@ class HammingSimulator(tk.Tk):
 
         cols = ("addr", "data_bits", "hamming", "width")
         self.tree = ttk.Treeview(card, columns=cols, show="headings", height=5)
-        heads = {"addr": ("Adres", 70), "data_bits": ("Giriş Verisi", 150),
-                 "hamming": ("Bellekteki Hamming Kodu", 360), "width": ("Genişlik", 80)}
+        heads = {"addr": ("Adres", 70), "data_bits": ("Giriş Verisi", 130),
+                 "hamming": ("Bellekteki Hamming Kodu", 380), "width": ("Genişlik", 80)}
         for c, (h, w) in heads.items():
             self.tree.heading(c, text=h)
             self.tree.column(c, width=w, anchor="center")
@@ -224,7 +214,7 @@ class HammingSimulator(tk.Tk):
         self.tree.bind("<<TreeviewSelect>>", self._on_mem_select)
 
     def _build_bit_grid(self, parent):
-        card = self._card(parent, "🔢  BİT IZGARASI (Seçili Bellek Satırı Görseli)")
+        card = self._card(parent, "🔢  BİT IZGARASI (Sağdan Sola Gösterim)")
         card.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         self.bit_grid_frame = tk.Frame(card, bg=CARD)
         self.bit_grid_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=6)
@@ -237,13 +227,14 @@ class HammingSimulator(tk.Tk):
         card = self._card(parent, "⚡  HATA ENJEKSİYONU & DÜZELTME DÜZENEĞİ")
         card.pack(fill=tk.X, pady=(0, 10))
 
-        tk.Label(card, text="Hata Enjekte Edilecek Pozisyon (1'den Başlar):", font=FONT_SMALL, fg=SUBTEXT, bg=CARD).pack(anchor="w", padx=12, pady=(4, 2))
+        tk.Label(card, text="Hata Enjekte Edilecek Pozisyon (Sağdan Başlar - 1'den n'e):", font=FONT_SMALL, fg=SUBTEXT, bg=CARD).pack(anchor="w", padx=12, pady=(4, 2))
 
         pos_row = tk.Frame(card, bg=CARD)
         pos_row.pack(fill=tk.X, padx=12, pady=4)
         self.error_pos_var = tk.StringVar()
         self.entry_errpos = tk.Entry(pos_row, textvariable=self.error_pos_var, font=FONT_MONO, bg=PANEL, fg=RED_C,
-                                     insertbackground=RED_C, bd=0, relief=tk.FLAT, width=8)
+                                     insertbackground=RED_C, bd=0, relief=tk.FLAT, width=8,
+                                     validate="key", validatecommand=(self.v_digit, '%P'))
         self.entry_errpos.pack(side=tk.LEFT, ipady=4, padx=(0, 10))
 
         tk.Button(pos_row, text="⚡ Hata Oluştur", font=FONT_SMALL, bg=RED_C, fg="white", bd=0, padx=8, pady=4, cursor="hand2", command=self._inject_error).pack(side=tk.LEFT, padx=2)
@@ -255,13 +246,13 @@ class HammingSimulator(tk.Tk):
         
         lbl_defs = [
             ("Hesaplanan Sendrom :", "lbl_syndrome"),
-            ("Teyit Edilen Hata  :", "lbl_errbit"),
-            ("Düzeltilen Kod     :", "lbl_corrected"),
+            ("Teyit Edilen Hata   :", "lbl_errbit"),
+            ("Düzeltilen Kod      :", "lbl_corrected"),
             ("Kanal Çıktı Verisi  :", "lbl_dataout"),
         ]
         for i, (txt, attr) in enumerate(lbl_defs):
             tk.Label(res_grid, text=txt, font=FONT_MONO, fg=SUBTEXT, bg=CARD, anchor="w").grid(row=i, column=0, sticky="w", pady=3)
-            lbl = tk.Label(res_grid, text="—", font=FONT_MONO, fg=YELLOW, bg=CARD, anchor="w", wraplength=250)
+            lbl = tk.Label(res_grid, text="—", font=FONT_MONO, fg=YELLOW, bg=CARD, anchor="w", wraplength=280)
             lbl.grid(row=i, column=1, sticky="w", padx=10)
             setattr(self, attr, lbl)
 
@@ -292,35 +283,46 @@ class HammingSimulator(tk.Tk):
         return inner
 
     # ─────────────────────────────────────────────
-    #  Arayüz Mantığı ve Olay Yöneticileri
+    #  Arayüz Filtreleri & Doğrulama Protokolleri
     # ─────────────────────────────────────────────
+
+    def _validate_binary_entry(self, text_if_allowed):
+        """Sadece 0 ve 1 girişine VE seçili maksimum genişliğe izin verir."""
+        width = self.data_width.get()
+        if len(text_if_allowed) > width:
+            return False
+        return all(c in '01' for c in text_if_allowed)
+
+    def _validate_digit_entry(self, text_if_allowed):
+        """Sadece sayı girişine izin verir."""
+        return text_if_allowed.isdigit() or text_if_allowed == ""
+
+    def _update_bit_label(self):
+        val = self.data_input.get()
+        width = self.data_width.get()
+        n = len(val)
+        color = GREEN if n == width else (YELLOW if n < width else RED_C)
+        status_text = '✓ Uygun' if n == width else '— Eksik' if n < width else '— Limit dışı'
+        self.lbl_bitcount.config(text=f"{n}/{width} bit  {status_text}", fg=color)
 
     def _on_width_change(self):
         self.data_input.set("")
-        self.lbl_bitcount.config(text="")
         self.lbl_parity_count.config(text="—")
         self.lbl_hamming_out.config(text="—")
         self._clear_error_display()
 
-    def _validate_input(self, event=None):
-        val = self.data_input.get()
-        width = self.data_width.get()
-        clean = ''.join(c for c in val if c in '01')
-        if clean != val:
-            self.data_input.set(clean)
-        n = len(clean)
-        color = GREEN if n == width else (YELLOW if n < width else RED_C)
-        self.lbl_bitcount.config(text=f"{n}/{width} bit  {'✓ Uygun' if n == width else '— Eksik' if n < width else '— Limit dışı'}", fg=color)
-
     def _random_fill(self):
         w = self.data_width.get()
-        self.data_input.set(''.join(random.choice('01') for _ in range(w)))
-        self._validate_input()
+        self.data_input.set(''.join(random.choice('01') for _ in range(w))[:w])
+
+    # ─────────────────────────────────────────────
+    #  Simülatör Temel Mantığı
+    # ─────────────────────────────────────────────
 
     def _encode_and_write(self):
         data = self.data_input.get().strip()
         width = self.data_width.get()
-        if len(data) != width or not all(c in '01' for c in data):
+        if len(data) != width:
             messagebox.showerror("Hata", f"Lütfen tam olarak {width} bit genişliğinde binary veri giriniz.")
             return
 
@@ -344,7 +346,6 @@ class HammingSimulator(tk.Tk):
         self.tree.insert("", tk.END, iid=str(addr), values=(f"0x{addr:03X}", data, hamming, f"{width} bit"))
         self._log(f"[BELLEK YAZMA] Adres 0x{addr:03X} -> Hamming Kodu Başarıyla Üretildi: {hamming}", "ok")
         
-        # Seçimi otomatik yap ve tetikle
         self.tree.selection_set(str(addr))
         self._on_mem_select()
 
@@ -354,12 +355,13 @@ class HammingSimulator(tk.Tk):
         addr = int(sel[0])
         row = self.memory.get(addr)
         if row:
-            if hasattr(self, 'grid_placeholder'):
+            if hasattr(self, 'grid_placeholder') and self.grid_placeholder.winfo_exists():
                 self.grid_placeholder.destroy()
             self._draw_bit_grid(row["hamming"], row["p_pos"])
             self._clear_error_display()
 
     def _inject_error(self):
+        """Kullanıcının seçtiği bit üzerinde yapay hata enjekte eder."""
         sel = self.tree.selection()
         if not sel:
             messagebox.showwarning("Uyarı", "Hata enjekte etmek için önce tablodan bellek hücresi seçin.")
@@ -368,8 +370,8 @@ class HammingSimulator(tk.Tk):
         row = self.memory[addr]
         pos_str = self.error_pos_var.get().strip()
         
-        if not pos_str.isdigit():
-            messagebox.showerror("Hata", "Lütfen nümerik bir bit pozisyon değeri girin.")
+        if not pos_str:
+            messagebox.showerror("Hata", "Lütfen bir bit pozisyon değeri girin.")
             return
             
         pos = int(pos_str)
@@ -378,9 +380,8 @@ class HammingSimulator(tk.Tk):
             messagebox.showerror("Hata", f"Girilen pozisyon Hamming dizisi sınırları dışında (1 ile {n} arasında olmalı).")
             return
 
-        # Yapay Hata Oluşturma (Bit Evirme)
         h = list(row["hamming"])
-        h[pos - 1] = '1' if h[pos - 1] == '0' else '0'
+        h[n - pos] = '1' if h[n - pos] == '0' else '0'
         row["hamming"] = ''.join(h)
 
         self.tree.item(str(addr), values=(f"0x{addr:03X}", row["data"], row["hamming"], f"{row['width']} bit"))
@@ -390,12 +391,12 @@ class HammingSimulator(tk.Tk):
         self.lbl_status.config(text=f"⚡ Bit {pos} üzerinde yapay hata oluşturuldu!", fg=RED_C, bg=ERR_BG)
 
     def _correct_and_read(self):
+        """Sendrom kelimesini çözümler ve hatayı teyit edip düzeltir."""
         sel = self.tree.selection()
         if not sel: return
         addr = int(sel[0])
         row = self.memory[addr]
         
-        # Karşılaştırma Ünitesi ve Sendrom Kelimesi Analizi
         syndrome, corrected = detect_correct(row["hamming"], row["r"])
         r = row["r"]
         p_pos = row["p_pos"]
@@ -418,7 +419,6 @@ class HammingSimulator(tk.Tk):
         data_out = extract_data(corrected, r)
         self.lbl_dataout.config(text=f"{data_out} (Hex: 0x{int(data_out, 2):X})", fg=ACCENT)
 
-        # Bellek kaydını düzeltilmiş haliyle güncelle
         row["hamming"] = corrected
         self.tree.item(str(addr), values=(f"0x{addr:03X}", row["data"], corrected, f"{row['width']} bit"))
         self._draw_bit_grid(corrected, p_pos, error_pos=syndrome if syndrome else None, corrected=True)
@@ -439,9 +439,8 @@ class HammingSimulator(tk.Tk):
             w.destroy()
 
         n = len(hamming)
-        cols = 12 if n <= 12 else (16 if n <= 24 else 20)
+        cols = 12 if n <= 12 else (16 if n <= 24 else 19)
 
-        # Renk Bilgilendirme Skalası
         legend = tk.Frame(self.bit_grid_frame, bg=CARD)
         legend.pack(anchor="w", pady=(0, 8))
         for bg, label in [(PARITY_BG, "Parity (P)"), (DATA_BG, "Veri (D)"), (ERR_BG, "Hatalı Bit"), (GREEN, "Düzeltildi")]:
@@ -452,8 +451,8 @@ class HammingSimulator(tk.Tk):
         grid = tk.Frame(self.bit_grid_frame, bg=CARD)
         grid.pack(anchor="w", fill=tk.BOTH, expand=True)
 
-        for i in range(1, n + 1):
-            bit = hamming[i - 1]
+        for idx, i in enumerate(range(n, 0, -1)):
+            bit = hamming[idx]
             is_parity = i in p_pos
             is_error   = (i == error_pos)
             is_corr    = (is_error and corrected)
@@ -467,14 +466,13 @@ class HammingSimulator(tk.Tk):
             else:
                 bg_c = DATA_BG; fg_c = TEXT
 
-            cell = tk.Frame(grid, bg=bg_c, bd=1, relief=tk.RIDGE, width=48, height=48)
+            cell = tk.Frame(grid, bg=bg_c, bd=1, relief=tk.RIDGE, width=44, height=44)
             cell.grid_propagate(False)
-            row_i  = (i - 1) // cols
-            col_i  = (i - 1) %  cols
+            row_i  = idx // cols
+            col_i  = idx %  cols
             cell.grid(row=row_i, column=col_i, padx=2, pady=2)
 
-            # Hücre içi etiketler
-            tk.Label(cell, text=bit, font=("Courier New", 14, "bold"), fg=fg_c, bg=bg_c).place(relx=0.5, rely=0.35, anchor="center")
+            tk.Label(cell, text=bit, font=("Courier New", 12, "bold"), fg=fg_c, bg=bg_c).place(relx=0.5, rely=0.35, anchor="center")
             tag = f"P{i}" if is_parity else f"D{i}"
             tk.Label(cell, text=tag, font=("Courier New", 7), fg=SUBTEXT, bg=bg_c).place(relx=0.5, rely=0.78, anchor="center")
 
@@ -482,6 +480,7 @@ class HammingSimulator(tk.Tk):
         for attr in ("lbl_syndrome", "lbl_errbit", "lbl_corrected", "lbl_dataout"):
             getattr(self, attr).config(text="—", fg=YELLOW)
         self.lbl_status.config(text="", bg=CARD)
+        self.error_pos_var.set("")  # Giriş kutusunu otomatik temizler
 
     def _log(self, msg: str, tag: str = "info"):
         self.log_text.configure(state=tk.NORMAL)
@@ -489,10 +488,6 @@ class HammingSimulator(tk.Tk):
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
 
-
-# ─────────────────────────────────────────────
-#  Uygulama Giriş Noktası
-# ─────────────────────────────────────────────
 if __name__ == "__main__":
     app = HammingSimulator()
     app.mainloop()
